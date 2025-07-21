@@ -1,7 +1,7 @@
 // socket.js - Socket.io client setup
 
+import { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
-import { useEffect, useState } from 'react';
 
 // Socket.io connection URL
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
@@ -21,6 +21,10 @@ export const useSocket = () => {
   const [messages, setMessages] = useState([]);
   const [users, setUsers] = useState([]);
   const [typingUsers, setTypingUsers] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [rooms, setRooms] = useState([]);
+  const [currentRoom, setCurrentRoom] = useState('general');
+  const [readReceipts, setReadReceipts] = useState({});
 
   // Connect to socket server
   const connect = (username) => {
@@ -37,7 +41,7 @@ export const useSocket = () => {
 
   // Send a message
   const sendMessage = (message) => {
-    socket.emit('send_message', { message });
+    socket.emit('send_message', { message, room: currentRoom });
   };
 
   // Send a private message
@@ -45,9 +49,20 @@ export const useSocket = () => {
     socket.emit('private_message', { to, message });
   };
 
+  // Join a chat room
+  const joinRoom = (room) => {
+    socket.emit('join_room', room);
+    setCurrentRoom(room);
+  };
+
   // Set typing status
   const setTyping = (isTyping) => {
-    socket.emit('typing', isTyping);
+    socket.emit('typing', { isTyping, room: currentRoom });
+  };
+
+  // Mark message as read
+  const markAsRead = (messageId) => {
+    socket.emit('read_receipt', { messageId, room: currentRoom });
   };
 
   // Socket event listeners
@@ -78,7 +93,6 @@ export const useSocket = () => {
     };
 
     const onUserJoined = (user) => {
-      // You could add a system message here
       setMessages((prev) => [
         ...prev,
         {
@@ -91,7 +105,6 @@ export const useSocket = () => {
     };
 
     const onUserLeft = (user) => {
-      // You could add a system message here
       setMessages((prev) => [
         ...prev,
         {
@@ -108,6 +121,24 @@ export const useSocket = () => {
       setTypingUsers(users);
     };
 
+    // Notification events
+    const onNotification = (notification) => {
+      setNotifications((prev) => [...prev, notification]);
+    };
+
+    // Room events
+    const onRoomList = (roomList) => {
+      setRooms(roomList);
+    };
+
+    // Read receipts
+    const onReadReceipt = ({ messageId, user }) => {
+      setReadReceipts((prev) => ({
+        ...prev,
+        [messageId]: [...(prev[messageId] || []), user],
+      }));
+    };
+
     // Register event listeners
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
@@ -117,6 +148,9 @@ export const useSocket = () => {
     socket.on('user_joined', onUserJoined);
     socket.on('user_left', onUserLeft);
     socket.on('typing_users', onTypingUsers);
+    socket.on('notification', onNotification);
+    socket.on('room_list', onRoomList);
+    socket.on('read_receipt', onReadReceipt);
 
     // Clean up event listeners
     return () => {
@@ -128,8 +162,11 @@ export const useSocket = () => {
       socket.off('user_joined', onUserJoined);
       socket.off('user_left', onUserLeft);
       socket.off('typing_users', onTypingUsers);
+      socket.off('notification', onNotification);
+      socket.off('room_list', onRoomList);
+      socket.off('read_receipt', onReadReceipt);
     };
-  }, []);
+  }, [currentRoom]);
 
   return {
     socket,
@@ -138,12 +175,18 @@ export const useSocket = () => {
     messages,
     users,
     typingUsers,
+    notifications,
+    rooms,
+    currentRoom,
+    readReceipts,
     connect,
     disconnect,
     sendMessage,
     sendPrivateMessage,
+    joinRoom,
     setTyping,
+    markAsRead,
   };
 };
 
-export default socket; 
+export default socket;
